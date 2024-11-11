@@ -1,45 +1,24 @@
+<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>My Spotify Profile</title>
-    <script type="module" src="/src/script.js"></script>
-  </head>
-  <body>
-    <h1>Display your Spotify Profile Data</h1>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spotify Album Recommender</title>
+  <script src="script.js" type="module"></script>
+</head>
+<body>
+  <h1>Spotify Album Recommender</h1>
+  <button id="login-btn">Login with Spotify</button>
+  <button id="logout-btn" style="display: none;">Logout</button>
+  <button id="new-album-btn" style="display: none;">Get New Album</button>
 
-    <section id="profile">
-      <h2>Logged in as <span id="displayName"></span></h2>
-      <span id="avatar"></span>
-      <ul>
-        <li>User ID: <span id="id"></span></li>
-        <li>Email: <span id="email"></span></li>
-        <li>Spotify URI: <a id="uri" href="#"></a></li>
-        <li>Link: <a id="url" href="#"></a></li>
-      </ul>
-    </section>
-    
-    <button id="login-btn">Login with Spotify</button>    
-
-    <section id="profile" style="display:none;">
-      <h2>Logged in as <span id="displayName"></span></h2>
-      <span id="avatar"></span>
-      <ul>
-        <li>User ID: <span id="id"></span></li>
-        <li>Email: <span id="email"></span></li>
-        <li>Spotify URI: <a id="uri" href="#"></a></li>
-        <li>Link: <a id="url" href="#"></a></li>
-        <li>Profile Image: <span id="imgUrl"></span></li>
-      </ul>
-    </section>
-
-    <section id="recommendations">
-      <h2>Recommended Songs</h2>
-      <ul id="recommendation-list"></ul>
-    </section>
-    
-    <script>
-      console.log("HTML script loaded!");
-    </script>    
-  </body>
+  <div id="album-info" style="margin-top: 20px; display: none;">
+    <h2 id="album-name"></h2>
+    <p id="album-artist"></p>
+    <img id="album-cover" style="max-width: 200px;" />
+    <br />
+    <a id="album-link" target="_blank">Listen on Spotify</a>
+  </div>
+</body>
 </html>
