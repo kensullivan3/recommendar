@@ -1,24 +1,28 @@
-<!-- index.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Spotify Album Recommender</title>
+  <title>RecommendAr</title>
+  <link rel="stylesheet" href="style.css" />
   <script src="script.js" type="module"></script>
 </head>
 <body>
-  <h1>Spotify Album Recommender</h1>
-  <button id="login-btn">Login with Spotify</button>
-  <button id="logout-btn" style="display: none;">Logout</button>
-  <button id="new-album-btn" style="display: none;">Get New Album</button>
+  <div id="app">
+    <h1>RecommendAr</h1>
 
-  <div id="album-info" style="margin-top: 20px; display: none;">
-    <h2 id="album-name"></h2>
-    <p id="album-artist"></p>
-    <img id="album-cover" style="max-width: 200px;" />
-    <br />
-    <a id="album-link" target="_blank">Listen on Spotify</a>
+    <div id="buttons">
+      <button id="logout-btn" style="display: none;">Logout</button>
+    </div>
+
+    <div id="album-info" style="display: none;">
+      <h2 id="album-name">Album Name</h2>
+      <h3 id="album-artist">Artist Name</h3>
+      <img id="album-cover" alt="Album cover" />
+      <a id="album-link" class="button spotify-button" target="_blank">Listen on Spotify</a>
+    </div>
+    
+    <button id="new-album-btn" class="button new-album-button">Get New Album</button>
   </div>
 </body>
 </html>
