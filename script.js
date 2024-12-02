@@ -11,39 +11,39 @@ import {
   onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/9.21.0/firebase-auth.js';
 
-// Initial load listener to handle token check and login button display
-window.addEventListener('load', async () => {
-  const token = localStorage.getItem('spotifyAccessToken');
+
+// Move isTokenValid outside of the event listener to make it globally accessible
+async function isTokenValid() {
   const tokenExpiration = localStorage.getItem('spotifyTokenExpiration');
-
-  if (!token || !tokenExpiration || Date.now() > tokenExpiration) {
-    // No valid token or token has expired; redirect to Spotify login
-    redirectToSpotifyLogin();
+  if (Date.now() < tokenExpiration) {
+    return true; // Token is still valid
   } else {
-    // Token is valid, continue to fetch recommendations
-    document.getElementById('logout-btn').style.display = 'block';
-    document.getElementById('new-album-btn').style.display = 'block';
-    fetchRecommendations(token);
+    // Refresh the access token if it has expired
+    const newAccessToken = await refreshAccessToken();
+    return !!newAccessToken; // Return true if the token is successfully refreshed
   }
-});
+}
 
-document.addEventListener('DOMContentLoaded', () => {
+// Unified event listener to handle both token check and page initialization
+document.addEventListener('DOMContentLoaded', async () => {
   const token = localStorage.getItem('spotifyAccessToken');
   const tokenExpiration = localStorage.getItem('spotifyTokenExpiration');
   const code = getCodeFromUrl();
 
-  if (!token || !tokenExpiration || Date.now() > tokenExpiration) {
-    if (!code) {
-      // If there's no valid token and no code in the URL, redirect to login
-      redirectToSpotifyLogin();
-      return; // Stop further execution
-    }
-  }
-
-  if (code) {
-    fetchAccessToken(code);
+  if (token && tokenExpiration && Date.now() < tokenExpiration) {
+    // Token is valid, fetch recommendations
+    document.getElementById('logout-btn').style.display = 'block';
+    document.getElementById('new-album-btn').style.display = 'block';
+    fetchRecommendations(token);
+  } else if (code) {
+    // Fetch access token using the code from the URL
+    await fetchAccessToken(code);
+  } else {
+    // No valid token or code; redirect to Spotify login
+    redirectToSpotifyLogin();
   }
 });
+
 
 
 
@@ -133,6 +133,54 @@ document.addEventListener('DOMContentLoaded', () => {
       redirectToSpotifyLogin();
     }
   }
+
+  async function refreshAccessToken() {
+    const refreshToken = localStorage.getItem('spotifyRefreshToken');
+    if (!refreshToken) {
+      redirectToSpotifyLogin();
+      return; // Exit if no refresh token
+    }
+  
+    const body = new URLSearchParams({
+      client_id: clientId,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken,
+    });
+  
+    try {
+      const response = await fetch('https://accounts.spotify.com/api/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString(),
+      });
+  
+      const data = await response.json();
+      if (response.ok) {
+        localStorage.setItem('spotifyAccessToken', data.access_token);
+        localStorage.setItem('spotifyTokenExpiration', Date.now() + data.expires_in * 1000);
+        console.log('Access token refreshed successfully.');
+        return data.access_token;
+      } else {
+        console.error('Error refreshing access token:', data);
+        redirectToSpotifyLogin();
+      }
+    } catch (error) {
+      console.error('Network error when refreshing access token:', error);
+      redirectToSpotifyLogin();
+    }
+  }
+  
+  async function isTokenValid() {
+    const tokenExpiration = localStorage.getItem('spotifyTokenExpiration');
+    if (Date.now() < tokenExpiration) {
+      return true; // Token is still valid
+    } else {
+      // Refresh the access token if it has expired
+      const newAccessToken = await refreshAccessToken();
+      return !!newAccessToken; // Return true if the token is successfully refreshed
+    }
+  }
+  
   
   async function fetchRecommendations(token) {
     try {
@@ -173,10 +221,15 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('album-info').style.display = 'block';
   }
 
-  document.getElementById('new-album-btn').addEventListener('click', () => {
+  document.getElementById('new-album-btn').addEventListener('click', async () => {
     const token = localStorage.getItem('spotifyAccessToken');
-    if (token) fetchRecommendations(token);
+    if (token && await isTokenValid()) {
+      fetchRecommendations(token);
+    } else {
+      redirectToSpotifyLogin();
+    }
   });
+  
 
   const code = getCodeFromUrl();
   if (code) fetchAccessToken(code);
