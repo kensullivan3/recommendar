@@ -7,7 +7,8 @@ const scopes = [
   'user-top-read',
   'user-read-recently-played',
   'playlist-read-private',
-  'playlist-read-collaborative'
+  'playlist-read-collaborative',
+  'user-modify-playback-state'  // Added scope for controlling playback
 ].join(' ');
 
 // Utility Functions
@@ -87,7 +88,7 @@ async function fetchAccessToken(code) {
       localStorage.setItem('spotifyTokenExpiration', Date.now() + data.expires_in * 1000);
       console.log('Access token and refresh token stored.');
       await fetchUserProfile(data.access_token); // Test by fetching user profile first
-      await fetchSpecificPlaylist(data.access_token);
+      await fetchRandomTrackAndRecommendAlbum(data.access_token);
     } else {
       console.error('Error fetching access token:', data);
       redirectToSpotifyLogin();
@@ -145,45 +146,81 @@ async function isTokenValid() {
 }
 
 // Spotify API Interaction
-async function fetchSpecificPlaylist(token) {
+async function fetchRandomTrackAndRecommendAlbum(token) {
   try {
-    const specificPlaylistId = '7pISMZ3hpVPn1mhPQXnB0F'; // Fixed playlist ID for testing
-
-    // Fetch tracks from the specific playlist directly by ID
-    await fetchTracksFromPlaylist(token, specificPlaylistId);
-  } catch (error) {
-    console.error('Error in fetchSpecificPlaylist:', error);
-  }
-}
-
-async function fetchTracksFromPlaylist(token, playlistId) {
-  try {
-    const tracksResponse = await fetch(`https://api.spotify.com/v1/playlists/${playlistId}/tracks`, {
+    // Fetch a random track by searching for a random keyword
+    const randomKeyword = generateRandomString(3); // Generate a random string to use as a keyword
+    const trackResponse = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(randomKeyword)}&type=track&limit=1`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    if (!tracksResponse.ok) {
-      console.error('Failed to fetch tracks from playlist:', tracksResponse.status);
+    if (!trackResponse.ok) {
+      console.error('Failed to fetch a random track:', trackResponse.status);
       return;
     }
 
-    const tracksData = await tracksResponse.json();
-    console.log('Tracks from Specific Playlist:', tracksData);
+    const trackData = await trackResponse.json();
+    console.log('Random Track Data:', trackData);
 
-    if (tracksData.items.length === 0) {
-      console.error('No tracks found in the specified playlist.');
+    if (trackData.tracks.items.length === 0) {
+      console.error('No tracks found for the random keyword.');
       return;
     }
 
-    // Get the first track's album
-    const firstTrack = tracksData.items[0].track;
-    if (firstTrack && firstTrack.album) {
-      displayAlbumInfo(firstTrack.album);
+    // Get the album from the track
+    const randomTrack = trackData.tracks.items[0];
+    const albumId = randomTrack.album.id;
+    await fetchAlbumById(token, albumId);
+  } catch (error) {
+    console.error('Error in fetchRandomTrackAndRecommendAlbum:', error);
+  }
+}
+
+async function fetchAlbumById(token, albumId) {
+  try {
+    const response = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+      console.error('Failed to fetch album by ID:', response.status);
+      return;
+    }
+
+    const albumData = await response.json();
+    console.log('Album Data:', albumData);
+
+    // Ensure the album has more than 4 tracks
+    if (albumData.tracks.items.length > 4) {
+      displayAlbumInfo(albumData);
+      await startPlayback(token, albumData.uri);  // Automatically start playing the album
     } else {
-      console.error('No valid album found in the track.');
+      console.log('Album has fewer than 5 tracks, searching for another...');
+      await fetchRandomTrackAndRecommendAlbum(token);
     }
   } catch (error) {
-    console.error('Error in fetchTracksFromPlaylist:', error);
+    console.error('Error in fetchAlbumById:', error);
+  }
+}
+
+async function startPlayback(token, contextUri) {
+  try {
+    const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ context_uri: contextUri })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to start playback:', response.status);
+      return;
+    }
+    console.log('Playback started successfully');
+  } catch (error) {
+    console.error('Error in startPlayback:', error);
   }
 }
 
@@ -223,7 +260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   console.log("Authorization Code:", code);
 
   if (token && tokenExpiration && Date.now() < tokenExpiration) {
-    await fetchSpecificPlaylist(token);
+    await fetchRandomTrackAndRecommendAlbum(token);
   } else if (code) {
     await fetchAccessToken(code);
   } else {
@@ -234,7 +271,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 document.getElementById('new-album-btn').addEventListener('click', async () => {
   const token = localStorage.getItem('spotifyAccessToken');
   if (token && await isTokenValid()) {
-    await fetchSpecificPlaylist(token);
+    await fetchRandomTrackAndRecommendAlbum(token);
   } else {
     redirectToSpotifyLogin();
   }
