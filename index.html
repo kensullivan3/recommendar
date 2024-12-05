@@ -6,23 +6,74 @@
   <title>RecommendAr</title>
   <link rel="stylesheet" href="style.css" />
   <script src="script.js" type="module"></script>
+  <style>
+    .hidden {
+      display: none;
+    }
+  </style>
 </head>
 <body>
   <div id="app">
     <h1>RecommendAr</h1>
 
+    <!-- Logout Button -->
     <div id="buttons">
-      <button id="logout-btn" style="display: none;">Logout</button>
+      <button id="logout-btn" class="hidden">Logout</button>
     </div>
 
-    <div id="album-info" style="display: none;">
+    <!-- Album Info Section -->
+    <div id="album-info" class="hidden" style="text-align: center;">
       <h2 id="album-name">Album Name</h2>
       <h3 id="album-artist">Artist Name</h3>
-      <img id="album-cover" alt="Album cover" />
+      <img id="album-cover" alt="Album cover for recommended music" />
       <a id="album-link" class="button spotify-button" target="_blank">Listen on Spotify</a>
     </div>
-    
+
+    <!-- Loading Indicator -->
+    <div id="loading" class="hidden" style="text-align: center; margin-top: 20px;">
+      Loading recommendations...
+    </div>
+
+    <!-- Get New Album Button -->
     <button id="new-album-btn" class="button new-album-button">Get New Album</button>
   </div>
+
+  <script>
+    // Add JS for better UI handling
+    document.addEventListener('DOMContentLoaded', () => {
+      const loadingIndicator = document.getElementById('loading');
+      const albumInfo = document.getElementById('album-info');
+      const logoutButton = document.getElementById('logout-btn');
+      const newAlbumButton = document.getElementById('new-album-btn');
+
+      // Show loading when fetching recommendations
+      newAlbumButton.addEventListener('click', () => {
+        loadingIndicator.classList.remove('hidden');
+        albumInfo.classList.add('hidden');
+      });
+
+      // Handle logout button visibility
+      if (localStorage.getItem('spotifyAccessToken')) {
+        logoutButton.classList.remove('hidden');
+      }
+
+      logoutButton.addEventListener('click', () => {
+        localStorage.clear();
+        window.location.reload();
+      });
+
+      // Hide loading indicator once album information is displayed
+      document.addEventListener('albumLoaded', () => {
+        loadingIndicator.classList.add('hidden');
+        albumInfo.classList.remove('hidden');
+      });
+    });
+
+    // Triggering custom event when album info is loaded
+    function albumLoaded() {
+      const event = new Event('albumLoaded');
+      document.dispatchEvent(event);
+    }
+  </script>
 </body>
 </html>
