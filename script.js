@@ -1,4 +1,23 @@
 // Configuration
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/9.21.0/firebase-app.js';
+import { getFirestore, doc, setDoc, getDoc } from 'https://www.gstatic.com/firebasejs/9.21.0/firebase-firestore.js';
+
+// Firebase configuration object
+const firebaseConfig = {
+  apiKey: "AIzaSyBXuDqvUjD6D0x4P1exirOkk2oR8Xm6cD4",
+  authDomain: "recommendar-album-list.firebaseapp.com",
+  databaseURL: "https://recommendar-album-list-default-rtdb.firebaseio.com",
+  projectId: "recommendar-album-list",
+  storageBucket: "recommendar-album-list.firebasestorage.app",
+  messagingSenderId: "466275098929",
+  appId: "1:466275098929:web:bcdeebcbb27ca853039010",
+  measurementId: "G-VK1MJPP1V9"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
 const clientId = 'edcd90da425b48bda2844511c524e312';
 const redirectUri = 'https://recommendar-album-list.web.app';
 const scopes = [
@@ -176,6 +195,30 @@ async function fetchRandomTrackAndRecommendAlbum(token) {
   }
 }
 
+// Store album information in Firestore
+async function storeAlbum(albumId) {
+  try {
+    await setDoc(doc(db, "recommendedAlbums", albumId), { timestamp: Date.now() });
+    console.log('Album ID stored successfully:', albumId);
+  } catch (error) {
+    console.error('Error storing album ID:', error);
+  }
+}
+
+// Check if an album has been recommended before
+async function hasAlbumBeenRecommended(albumId) {
+  try {
+    const docRef = doc(db, "recommendedAlbums", albumId);
+    const docSnap = await getDoc(docRef);
+    return docSnap.exists();
+  } catch (error) {
+    console.error('Error checking album ID:', error);
+    return false;
+  }
+}
+
+
+// Add storing logic after displaying the album
 async function fetchAlbumById(token, albumId) {
   try {
     const response = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
@@ -192,8 +235,14 @@ async function fetchAlbumById(token, albumId) {
 
     // Ensure the album has more than 4 tracks
     if (albumData.tracks.items.length > 4) {
-      displayAlbumInfo(albumData);
-      await startPlayback(token, albumData.uri);  // Automatically start playing the album
+      if (!(await hasAlbumBeenRecommended(albumId))) {
+        displayAlbumInfo(albumData);
+        await storeAlbum(albumId);
+        await startPlayback(token, albumData.uri);  // Automatically start playing the album
+      } else {
+        console.log('Album has already been recommended, searching for another...');
+        await fetchRandomTrackAndRecommendAlbum(token);
+      }
     } else {
       console.log('Album has fewer than 5 tracks, searching for another...');
       await fetchRandomTrackAndRecommendAlbum(token);
@@ -202,6 +251,7 @@ async function fetchAlbumById(token, albumId) {
     console.error('Error in fetchAlbumById:', error);
   }
 }
+
 
 async function startPlayback(token, contextUri) {
   try {
