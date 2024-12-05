@@ -7,7 +7,8 @@ const scopes = [
   'user-top-read',
   'user-read-recently-played',
   'playlist-read-private',
-  'playlist-read-collaborative'
+  'playlist-read-collaborative',
+  'user-modify-playback-state'  // Added scope for controlling playback
 ].join(' ');
 
 // Utility Functions
@@ -188,9 +189,38 @@ async function fetchAlbumById(token, albumId) {
 
     const albumData = await response.json();
     console.log('Album Data:', albumData);
-    displayAlbumInfo(albumData);
+
+    // Ensure the album has more than 4 tracks
+    if (albumData.tracks.items.length > 4) {
+      displayAlbumInfo(albumData);
+      await startPlayback(token, albumData.uri);  // Automatically start playing the album
+    } else {
+      console.log('Album has fewer than 5 tracks, searching for another...');
+      await fetchRandomTrackAndRecommendAlbum(token);
+    }
   } catch (error) {
     console.error('Error in fetchAlbumById:', error);
+  }
+}
+
+async function startPlayback(token, contextUri) {
+  try {
+    const response = await fetch('https://api.spotify.com/v1/me/player/play', {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ context_uri: contextUri })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to start playback:', response.status);
+      return;
+    }
+    console.log('Playback started successfully');
+  } catch (error) {
+    console.error('Error in startPlayback:', error);
   }
 }
 
