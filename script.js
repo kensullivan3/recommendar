@@ -203,8 +203,66 @@ async function fetchAlbumById(token, albumId) {
   }
 }
 
+async function ensureActivePlayback(token) {
+  try {
+    // Get the current player's state
+    const response = await fetch('https://api.spotify.com/v1/me/player', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (response.status === 204 || response.status === 404) {
+      console.log('No active player found. Attempting to transfer playback...');
+      // Fetch available devices
+      const devicesResponse = await fetch('https://api.spotify.com/v1/me/player/devices', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const devicesData = await devicesResponse.json();
+      const iphoneDevice = devicesData.devices.find(device => device.name === 'iPhone');
+
+      if (iphoneDevice) {
+        // Transfer playback to the iPhone
+        const transferResponse = await fetch('https://api.spotify.com/v1/me/player', {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ device_ids: [iphoneDevice.id], play: true })
+        });
+
+        if (!transferResponse.ok) {
+          console.error('Failed to transfer playback:', transferResponse.status);
+          return false;
+        }
+
+        console.log('Playback transferred to iPhone successfully');
+        return true;
+      } else {
+        console.error('iPhone device not found');
+        return false;
+      }
+    }
+
+    console.log('Player is active');
+    return true;
+  } catch (error) {
+    console.error('Error ensuring active playback:', error);
+    return false;
+  }
+}
+
 async function startPlayback(token, contextUri) {
   try {
+    // Ensure an active playback session
+    const playbackReady = await ensureActivePlayback(token);
+
+    if (!playbackReady) {
+      console.error('Playback could not be started or transferred');
+      return;
+    }
+
+    // Start playback
     const response = await fetch('https://api.spotify.com/v1/me/player/play', {
       method: 'PUT',
       headers: {
@@ -223,6 +281,7 @@ async function startPlayback(token, contextUri) {
     console.error('Error in startPlayback:', error);
   }
 }
+
 
 async function fetchUserProfile(token) {
   try {
