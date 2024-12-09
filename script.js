@@ -18,6 +18,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// Configuration
 const clientId = 'edcd90da425b48bda2844511c524e312';
 const redirectUri = 'https://recommendar-album-list.web.app';
 const scopes = [
@@ -189,36 +190,58 @@ async function fetchRandomTrackAndRecommendAlbum(token) {
     // Get the album from the track
     const randomTrack = trackData.tracks.items[0];
     const albumId = randomTrack.album.id;
+
+    // Fetch album details to check track count
+    const albumResponse = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!albumResponse.ok) {
+      console.error('Failed to fetch album by ID:', albumResponse.status);
+      return;
+    }
+
+    const albumData = await albumResponse.json();
+    console.log('Album Data:', albumData);
+
+    // Ensure the album has more than 4 tracks
+    if (albumData.tracks.items.length <= 4) {
+      console.log('Album has fewer than 5 tracks. Fetching a new one...');
+      await fetchRandomTrackAndRecommendAlbum(token); // Retry with a new random track
+      return;
+    }
+
+    // Save album to Firestore and recommend
     await fetchAlbumById(token, albumId);
   } catch (error) {
     console.error('Error in fetchRandomTrackAndRecommendAlbum:', error);
   }
 }
 
-// Store album information in Firestore
-async function storeAlbum(albumId) {
-  try {
-    await setDoc(doc(db, "recommendedAlbums", albumId), { timestamp: Date.now() });
-    console.log('Album ID stored successfully:', albumId);
-  } catch (error) {
-    console.error('Error storing album ID:', error);
-  }
-}
 
-// Check if an album has been recommended before
-async function hasAlbumBeenRecommended(albumId) {
+
+// Save album to Firestore and avoid duplicates
+async function saveAlbumToFirestore(album) {
   try {
-    const docRef = doc(db, "recommendedAlbums", albumId);
+    // Check if the album is already in Firestore
+    const docRef = doc(db, "albums", album.id); // Use Spotify's album ID as the document ID
     const docSnap = await getDoc(docRef);
-    return docSnap.exists();
+
+    if (docSnap.exists()) {
+      console.log("Album already exists in Firestore:", album.name);
+      return false; // Indicate that the album is a duplicate
+    }
+
+    // Save the album to Firestore
+    await setDoc(docRef, album);
+    console.log("Album saved to Firestore:", album.name);
+    return true; // Indicate that the album was saved successfully
   } catch (error) {
-    console.error('Error checking album ID:', error);
+    console.error("Error saving album to Firestore:", error);
     return false;
   }
 }
 
-
-// Add storing logic after displaying the album
 async function fetchAlbumById(token, albumId) {
   try {
     const response = await fetch(`https://api.spotify.com/v1/albums/${albumId}`, {
@@ -233,35 +256,98 @@ async function fetchAlbumById(token, albumId) {
     const albumData = await response.json();
     console.log('Album Data:', albumData);
 
-    // Ensure the album has more than 4 tracks
-    if (albumData.tracks.items.length > 4) {
-      if (!(await hasAlbumBeenRecommended(albumId))) {
-        displayAlbumInfo(albumData);
-        await storeAlbum(albumId);
-        await startPlayback(token, albumData.uri);  // Automatically start playing the album
-      } else {
-        console.log('Album has already been recommended, searching for another...');
-        await fetchRandomTrackAndRecommendAlbum(token);
-      }
-    } else {
-      console.log('Album has fewer than 5 tracks, searching for another...');
-      await fetchRandomTrackAndRecommendAlbum(token);
+    // Save album to Firestore and check for duplicates
+    const isNewAlbum = await saveAlbumToFirestore({
+      id: albumData.id, 
+      name: albumData.name,
+      artist: albumData.artists.map((artist) => artist.name).join(", "),
+      spotify_url: albumData.external_urls.spotify,
+      timestamp: new Date().toISOString(),
+    });
+
+    if (!isNewAlbum) {
+      console.log("Duplicate album detected. Fetching a new one...");
+      return; // Skip duplicate albums
     }
+
+    // Display the album information
+    displayAlbumInfo(albumData);
+
+    // Automatically start playback
+    await startPlayback(token, albumData.uri);
   } catch (error) {
     console.error('Error in fetchAlbumById:', error);
   }
 }
 
 
+
+async function ensureActivePlayback(token) {
+  try {
+    // Get the current player's state
+    const response = await fetch('https://api.spotify.com/v1/me/player', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (response.status === 204 || response.status === 404) {
+      console.log('No active player found. Attempting to transfer playback...');
+      // Fetch available devices
+      const devicesResponse = await fetch('https://api.spotify.com/v1/me/player/devices', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const devicesData = await devicesResponse.json();
+      const iphoneDevice = devicesData.devices.find(device => device.name === 'iPhone');
+
+      if (iphoneDevice) {
+        // Transfer playback to the iPhone
+        const transferResponse = await fetch('https://api.spotify.com/v1/me/player', {
+          method: 'PUT',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ device_ids: [iphoneDevice.id], play: true })
+        });
+
+        if (!transferResponse.ok) {
+          console.error('Failed to transfer playback:', transferResponse.status);
+          return false;
+        }
+
+        console.log('Playback transferred to iPhone successfully');
+        return true;
+      } else {
+        console.error('iPhone device not found');
+        return false;
+      }
+    }
+
+    console.log('Player is active');
+    return true;
+  } catch (error) {
+    console.error('Error ensuring active playback:', error);
+    return false;
+  }
+}
+
 async function startPlayback(token, contextUri) {
   try {
+    // Ensure an active playback session
+    const playbackReady = await ensureActivePlayback(token);
+
+    if (!playbackReady) {
+      console.error('Playback could not be started or transferred');
+      return;
+    }
+
     const response = await fetch('https://api.spotify.com/v1/me/player/play', {
       method: 'PUT',
       headers: {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ context_uri: contextUri })
+      body: JSON.stringify({ context_uri: contextUri }) // Pass the album's URI
     });
 
     if (!response.ok) {
@@ -273,6 +359,8 @@ async function startPlayback(token, contextUri) {
     console.error('Error in startPlayback:', error);
   }
 }
+
+
 
 async function fetchUserProfile(token) {
   try {
